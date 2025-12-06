@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Flask, Response, jsonify, request
 from presidio_anonymizer import AnonymizerEngine, DeanonymizeEngine
-from presidio_anonymizer.entities import InvalidParamError
+from presidio_anonymizer.entities import InvalidParamError, OperatorConfig
 from presidio_anonymizer.services.app_entities_convertor import AppEntitiesConvertor
 from werkzeug.exceptions import BadRequest, HTTPException
 
@@ -95,6 +95,39 @@ class Server:
         def deanonymizers():
             """Return a list of supported deanonymizers."""
             return jsonify(self.deanonymize.get_deanonymizers())
+
+        @self.app.route("/genz-preview", methods=["GET"])
+        def genz_preview():
+            """Return example Gen-Z anonymization output."""
+            example_data = {
+                "example": "Call Emily at 577-988-1234",
+                "example_output": "Call GOAT at vibe check",
+                "description": "Example output of the genz anonymizer."
+            }
+            return jsonify(example_data)
+
+        @self.app.route("/genz", methods=["POST"])
+        def genz_anonymize():
+            """Anonymize text using the Gen-Z anonymizer for provided entities."""
+            content = request.get_json()
+            if not content:
+                raise BadRequest("Invalid request JSON")
+
+            text = content.get("text", "")
+            analyzer_results = AppEntitiesConvertor.analyzer_results_from_json(
+                content.get("analyzer_results")
+            )
+
+            # Build operators config: use genz for each detected entity type
+            operators = {}
+            for res in analyzer_results:
+                operators[res.entity_type] = OperatorConfig("genz", {})
+
+            result = self.anonymizer.anonymize(
+                text=text, analyzer_results=analyzer_results, operators=operators
+            )
+
+            return Response(result.to_json(), mimetype="application/json")
 
         @self.app.errorhandler(InvalidParamError)
         def invalid_param(err):

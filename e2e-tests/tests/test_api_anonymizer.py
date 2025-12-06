@@ -3,7 +3,7 @@ import json
 import pytest
 
 from common.assertions import equal_json_strings
-from common.methods import anonymize, anonymizers, deanonymize
+from common.methods import anonymize, anonymizers, deanonymize, genz
 
 
 @pytest.mark.api
@@ -401,3 +401,43 @@ def test_overlapping_keep_both():
 
     assert response_status == 200
     assert equal_json_strings(expected_response, response_content)
+
+
+@pytest.mark.api
+def test_given_anonymize_called_with_genz_then_expected_valid_response_returned():
+    request_body = """
+    {
+        "text": "Please contact Emily Carter at 734-555-9284 if you have questions about the workshop registration.",
+        "analyzer_results": [
+            {"start": 15, "end": 27, "score": 0.3, "entity_type": "PERSON"},
+            {"start": 31, "end": 43, "score": 0.95, "entity_type": "PHONE_NUMBER"}
+        ]
+    }
+    """
+
+    response_status, response_content = genz(request_body)
+
+    # Since Gen-Z anonymizer picks random words, we only verify the response structure and status
+    assert response_status == 200
+    
+    # Parse the response JSON
+    response_json = json.loads(response_content)
+    
+    # Verify that the response contains the required keys
+    assert "text" in response_json
+    assert "items" in response_json
+    
+    # Verify that the text has been modified (anonymized)
+    response_text = response_json["text"]
+    assert response_text != "Please contact Emily Carter at 734-555-9284 if you have questions about the workshop registration."
+    
+    # Verify that both entities were anonymized in items list
+    assert len(response_json["items"]) == 2
+    
+    # Check that each item has the required fields
+    for item in response_json["items"]:
+        assert "entity_type" in item
+        assert "text" in item
+        assert "operator" in item
+        assert item["operator"] == "genz"
+        assert item["entity_type"] in ["PERSON", "PHONE_NUMBER"]
